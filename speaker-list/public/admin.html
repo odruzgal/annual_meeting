@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Speaker List · Floor</title>
+<style>
+  :root {
+    --ink: #0F1626;
+    --ink-raise: #18213A;
+    --rule: #2B3757;
+    --parchment: #F3F0E7;
+    --dim: #8492B0;
+    --brass: #C99A3E;
+    --verdigris: #52A98D;
+    --alarm: #E0524B;
+
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--parchment);
+    font-family: var(--sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .label {
+    font-size: 0.72rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--dim);
+    font-weight: 600;
+  }
+
+  /* ---------- top bar ---------- */
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.9rem 1.6rem;
+    border-bottom: 1px solid var(--rule);
+    flex-wrap: wrap;
+  }
+  .pass-mark { display: flex; align-items: baseline; gap: 0.6rem; }
+  .pass-mark b {
+    font-family: var(--serif);
+    font-size: 1.5rem;
+    font-weight: 400;
+    color: var(--brass);
+    letter-spacing: 0.05em;
+  }
+  .link { display: flex; align-items: baseline; gap: 0.7rem; }
+  .link code {
+    font-family: var(--mono);
+    font-size: 1rem;
+    color: var(--parchment);
+    background: var(--ink-raise);
+    padding: 0.25rem 0.6rem;
+    border-radius: 3px;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--alarm); display: inline-block; }
+  .dot.on { background: var(--verdigris); }
+
+  /* ---------- stage ---------- */
+  main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 2rem 1.6rem;
+    text-align: center;
+    gap: 0.4rem;
+  }
+
+  #state {
+    font-size: 0.85rem;
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--verdigris);
+  }
+  #state.rebuttal { color: var(--brass); }
+  #state.idle { color: var(--dim); }
+  #state.over { color: var(--alarm); }
+
+  #speaker {
+    font-family: var(--serif);
+    font-size: clamp(2.6rem, 7.5vw, 6rem);
+    line-height: 1.05;
+    font-weight: 400;
+    margin: 0.3rem 0 0.2rem;
+    letter-spacing: -0.01em;
+  }
+  #speaker.none { color: var(--dim); font-style: italic; }
+
+  #clock {
+    font-family: var(--mono);
+    font-size: clamp(5rem, 24vw, 20rem);
+    line-height: 0.92;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.03em;
+    margin: 0.2rem 0;
+  }
+  #clock.warn { color: var(--brass); }
+  #clock.over { color: var(--alarm); }
+  #clock.paused { opacity: 0.4; }
+
+  /* the time bank: what's left of this person's minute */
+  .bank {
+    width: min(900px, 82vw);
+    height: 12px;
+    background: var(--ink-raise);
+    border-radius: 999px;
+    overflow: hidden;
+    margin-top: 0.5rem;
+  }
+  .bank i {
+    display: block;
+    height: 100%;
+    background: var(--verdigris);
+    width: 0%;
+    transition: width 240ms linear, background 240ms linear;
+  }
+  .bank i.rebuttal { background: var(--brass); }
+  .bank i.over { background: var(--alarm); }
+  @media (prefers-reduced-motion: reduce) { .bank i { transition: none; } }
+
+  #pausedFlag {
+    color: var(--brass);
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    font-weight: 700;
+    height: 1.2em;
+    margin-top: 0.7rem;
+  }
+
+  /* ---------- signup splash ---------- */
+  #splash { display: none; text-align: center; }
+  #splash.show { display: block; }
+  .splash-count {
+    font-family: var(--mono);
+    font-size: clamp(6rem, 22vw, 16rem);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    color: var(--brass);
+    margin-top: 0.4rem;
+  }
+  .splash-count-label {
+    font-family: var(--serif);
+    font-size: clamp(1.4rem, 4vw, 2.6rem);
+    color: var(--parchment);
+  }
+  .join-instr { color: var(--dim); font-size: 1rem; margin-top: 1.4rem; }
+
+  /* ---------- queues ---------- */
+  .queues {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--rule);
+    border-top: 1px solid var(--rule);
+  }
+  .queues section { background: var(--ink); padding: 1rem 1.6rem 1.2rem; min-height: 8.5rem; }
+  .queues ol { list-style: none; margin: 0.7rem 0 0; padding: 0; }
+  .queues li {
+    font-family: var(--serif);
+    font-size: clamp(1.05rem, 2.1vw, 1.7rem);
+    padding: 0.18rem 0;
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+  }
+  .queues li .n {
+    font-family: var(--mono);
+    font-size: 0.75em;
+    color: var(--dim);
+    min-width: 1.6em;
+  }
+  .queues li .ms {
+    font-family: var(--mono);
+    font-size: 0.7em;
+    color: var(--dim);
+    margin-left: auto;
+  }
+  .queues li.next .n, .queues li.next { color: var(--parchment); }
+  .queues li.next .n { color: var(--brass); }
+  .empty { color: var(--dim); font-style: italic; font-family: var(--serif); font-size: 1.1rem; margin-top: 0.7rem; }
+  .deferred { margin-top: 0.9rem; font-size: 0.78rem; color: var(--dim); }
+  .deferred span { font-family: var(--serif); font-style: italic; font-size: 1.05rem; }
+
+  /* ---------- controls ---------- */
+  footer {
+    border-top: 1px solid var(--rule);
+    background: var(--ink-raise);
+    padding: 0.75rem 1.6rem;
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  button {
+    font-family: var(--sans);
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 0.6rem 1.1rem;
+    border-radius: 4px;
+    border: 1px solid var(--rule);
+    background: transparent;
+    color: var(--parchment);
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--brass); color: var(--brass); }
+  button:disabled { opacity: 0.3; cursor: default; }
+  button:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+  button.primary { background: var(--brass); border-color: var(--brass); color: var(--ink); }
+  button.primary:hover:not(:disabled) { color: var(--ink); filter: brightness(1.1); }
+  button.danger:hover:not(:disabled) { border-color: var(--alarm); color: var(--alarm); }
+  input[type=password], input[type=text] {
+    font-family: var(--mono);
+    font-size: 0.9rem;
+    padding: 0.55rem 0.7rem;
+    border-radius: 4px;
+    border: 1px solid var(--rule);
+    background: var(--ink);
+    color: var(--parchment);
+    width: 7rem;
+  }
+  .spacer { flex: 1; }
+  #err { color: var(--alarm); font-size: 0.82rem; }
+  .hint { color: var(--dim); font-size: 0.78rem; }
+
+  /* ---------- roster drawer ---------- */
+  #drawer {
+    position: fixed; top: 0; right: 0; bottom: 0;
+    width: min(430px, 94vw);
+    background: var(--ink-raise);
+    border-left: 1px solid var(--rule);
+    transform: translateX(101%);
+    transition: transform 220ms ease;
+    display: flex; flex-direction: column;
+    z-index: 20;
+  }
+  #drawer.open { transform: none; }
+  @media (prefers-reduced-motion: reduce) { #drawer { transition: none; } }
+
+  .drawer-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1rem 1.1rem; border-bottom: 1px solid var(--rule);
+  }
+  .drawer-head button { padding: 0.4rem 0.7rem; margin: 0; }
+  #rosterList { overflow-y: auto; flex: 1; padding: 0.4rem 0 2rem; }
+
+  #drawerErr {
+    display: none;
+    padding: 0.7rem 1.1rem;
+    background: rgba(224,82,75,0.13);
+    border-bottom: 1px solid var(--alarm);
+    color: var(--alarm);
+    font-size: 0.85rem;
+  }
+  #drawerErr.show { display: block; }
+
+  .r-row { padding: 0.75rem 1.1rem; border-bottom: 1px solid var(--rule); }
+  .r-top { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.5rem; }
+  .r-name { font-family: var(--serif); font-size: 1.2rem; flex: 1; }
+  .r-tag {
+    font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase;
+    font-weight: 700; padding: 0.16rem 0.4rem; border-radius: 3px;
+  }
+  .r-tag.floor { background: var(--verdigris); color: var(--ink); }
+  .r-tag.queued { background: var(--brass); color: var(--ink); }
+  .r-tag.passed { border: 1px solid var(--rule); color: var(--dim); }
+  .r-x {
+    border: 0; background: transparent; color: var(--dim);
+    font-size: 1.15rem; line-height: 1; padding: 0.2rem 0.35rem; cursor: pointer;
+  }
+  .r-x:hover { color: var(--alarm); border-color: transparent; }
+
+  .r-line { display: flex; align-items: center; gap: 0.35rem; margin-top: 0.32rem; }
+  .r-line .label { width: 4.6rem; flex: none; font-size: 0.6rem; }
+  .r-line button {
+    padding: 0.32rem 0.5rem; font-size: 0.75rem; font-family: var(--mono);
+    min-width: 2.4rem;
+  }
+  .r-line input {
+    width: 4.2rem; text-align: center; padding: 0.34rem 0.2rem;
+    font-size: 0.92rem; font-variant-numeric: tabular-nums;
+  }
+  .r-line .full {
+    margin-left: auto; font-size: 0.68rem; letter-spacing: 0.08em;
+    text-transform: uppercase; padding: 0.32rem 0.5rem;
+  }
+
+  #scrim {
+    position: fixed; inset: 0; background: rgba(8,12,22,0.55);
+    z-index: 10; display: none;
+  }
+  #scrim.open { display: block; }
+
+  @media (max-width: 720px) {
+    .queues { grid-template-columns: 1fr; }
+    header { font-size: 0.9rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="pass-mark">
+    <span class="label">Pass</span>
+    <b id="passMark">—</b>
+  </div>
+  <div class="link">
+    <span class="label">Link to email out</span>
+    <code id="joinUrl">…</code>
+    <span class="dot" id="dot" title="connection"></span>
+  </div>
+</header>
+
+<main>
+  <div id="splash">
+    <div class="label">Sign-ups are open</div>
+    <div class="splash-count"><span id="splashCount">0</span></div>
+    <div class="splash-count-label">on the list</div>
+    <div class="join-instr">Members join from the link you emailed out.</div>
+  </div>
+
+  <div id="stage">
+    <div id="state" class="idle">Floor open</div>
+    <h1 id="speaker" class="none">Nobody has the floor</h1>
+    <div id="clock">0:00</div>
+    <div class="bank"><i id="bank"></i></div>
+    <div id="pausedFlag"></div>
+  </div>
+</main>
+
+<div class="queues">
+  <section>
+    <div class="label">Up next · speaking</div>
+    <ol id="upcoming"></ol>
+    <div class="deferred" id="deferred"></div>
+  </section>
+  <section>
+    <div class="label">Rebuttal queue · first come</div>
+    <ol id="rebuttals"></ol>
+  </section>
+</div>
+
+<footer>
+  <span class="label">Chair</span>
+  <input type="password" id="pin" placeholder="PIN" autocomplete="off" />
+  <button id="btnStart" class="primary">Start meeting</button>
+  <button id="btnPause">Pause clock</button>
+  <button id="btnNext">Next speaker</button>
+  <button id="btnRoster">Roster &amp; time</button>
+  <span class="spacer"></span>
+  <span id="err"></span>
+  <button id="btnEnd" class="danger">End meeting</button>
+  <button id="btnReset" class="danger">Reset</button>
+</footer>
+
+<div id="scrim"></div>
+<aside id="drawer">
+  <div class="drawer-head">
+    <span class="label">Roster &amp; time</span>
+    <input type="password" id="pin2" placeholder="PIN" autocomplete="off" style="width:5rem" />
+    <button id="btnClose">Close</button>
+  </div>
+  <div id="drawerErr"></div>
+  <div id="rosterList"></div>
+</aside>
+
+<script>
+'use strict';
+
+var FULL = 60000;
+var state = null;
+var offset = 0; // serverNow - clientNow
+
+var $ = function (id) { return document.getElementById(id); };
+
+function fmt(ms) {
+  var over = ms < 0;
+  var t = Math.abs(ms);
+  var total = Math.ceil(t / 1000);
+  var m = Math.floor(total / 60);
+  var s = total % 60;
+  return (over ? '+' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+}
+function short(ms) {
+  var total = Math.ceil(Math.max(0, ms) / 1000);
+  return Math.floor(total / 60) + ':' + (total % 60 < 10 ? '0' : '') + (total % 60);
+}
+
+function post(action, extra) {
+  var body = Object.assign({ action: action, pin: $('pin').value }, extra || {});
+  return fetch('/action', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  }).then(function (r) { return r.json(); }).then(function (j) {
+    $('err').textContent = j.error || '';
+    if (!j.error) {
+      try { localStorage.setItem('gleePin', $('pin').value); } catch (e) {}
+    }
+    return j;
+  }).catch(function () { $('err').textContent = 'Lost the server.'; });
+}
+
+$('btnStart').onclick = function () { post('start'); };
+$('btnNext').onclick = function () { post('next'); };
+$('btnEnd').onclick = function () {
+  if (confirm('End the meeting for everyone?')) post('endMeeting');
+};
+$('btnReset').onclick = function () {
+  if (confirm('Clear the whole list and start over?')) post('reset');
+};
+$('btnPause').onclick = function () {
+  if (!state || !state.active) return;
+  post(state.active.paused ? 'resume' : 'pause');
+};
+
+try {
+  var saved = localStorage.getItem('gleePin');
+  if (saved) $('pin').value = saved;
+} catch (e) {}
+
+// ---- live stream ----
+var es = new EventSource('/events');
+es.onopen = function () { $('dot').classList.add('on'); };
+es.onerror = function () { $('dot').classList.remove('on'); };
+es.onmessage = function (e) {
+  state = JSON.parse(e.data);
+  offset = state.serverNow - Date.now();
+  render();
+};
+
+function remaining() {
+  if (!state || !state.active) return 0;
+  var a = state.active;
+  if (a.runningSince === null) return a.remainingMs;
+  return a.remainingMs - ((Date.now() + offset) - a.runningSince);
+}
+
+function list(el, items, showTime) {
+  el.innerHTML = '';
+  if (!items.length) {
+    var d = document.createElement('div');
+    d.className = 'empty';
+    d.textContent = el.id === 'rebuttals' ? 'No one waiting.' : 'No one left this pass.';
+    el.appendChild(d);
+    return;
+  }
+  items.forEach(function (m, i) {
+    var li = document.createElement('li');
+    if (i === 0) li.className = 'next';
+    li.innerHTML = '<span class="n">' + (i + 1) + '</span><span></span><span class="ms"></span>';
+    li.children[1].textContent = m.name;
+    li.children[2].textContent = short(showTime === 'reb' ? m.rebuttalMs : m.speakMs);
+    el.appendChild(li);
+  });
+}
+
+// ---- roster drawer ----
+var rows = {}; // id -> row element
+
+$('btnRoster').onclick = function () {
+  $('drawer').classList.add('open');
+  $('scrim').classList.add('open');
+  renderRoster();
+  if (!$('pin').value) {
+    drawerErr('Enter the chair PIN to change anything.');
+    $('pin2').focus();
+  }
+};
+function drawerErr(msg) {
+  $('drawerErr').textContent = msg || '';
+  $('drawerErr').classList.toggle('show', !!msg);
+}
+// The two PIN fields are the same field wearing different hats.
+$('pin2').oninput = function () { $('pin').value = $('pin2').value; drawerErr(''); };
+$('pin').oninput = function () { $('pin2').value = $('pin').value; };
+
+function closeDrawer() {
+  $('drawer').classList.remove('open');
+  $('scrim').classList.remove('open');
+  drawerErr('');
+}
+$('btnClose').onclick = closeDrawer;
+$('scrim').onclick = closeDrawer;
+document.addEventListener('keydown', function (e) {
+  // Escape inside a field cancels that edit; it should not close the whole drawer.
+  if (e.key !== 'Escape') return;
+  if (document.activeElement && document.activeElement.tagName === 'INPUT'
+      && $('drawer').contains(document.activeElement)) return;
+  closeDrawer();
+});
+
+// Accepts "0:45", "45", "1:00", "1:5" — anything a hurried chair might type.
+function parseTime(str) {
+  str = String(str).trim();
+  if (!str) return null;
+  var m;
+  if (str.indexOf(':') > -1) {
+    var p = str.split(':');
+    var mins = parseInt(p[0], 10);
+    var secs = parseInt(p[1], 10);
+    if (isNaN(mins) || isNaN(secs)) return null;
+    m = mins * 60 + secs;
+  } else {
+    m = parseInt(str, 10);
+    if (isNaN(m)) return null;
+  }
+  return Math.max(0, m) * 1000;
+}
+
+function setTime(id, field, ms) {
+  var body = { id: id };
+  body[field] = ms;
+  return post('setTime', body).then(function (j) {
+    drawerErr(j && j.error ? j.error : '');
+    return j;
+  });
+}
+
+function buildRow(m) {
+  var row = document.createElement('div');
+  row.className = 'r-row';
+  row.innerHTML =
+    '<div class="r-top">' +
+      '<span class="r-name"></span>' +
+      '<span class="r-tag" style="display:none"></span>' +
+      '<button class="r-x" title="Remove from the list">&times;</button>' +
+    '</div>' +
+    '<div class="r-line" data-f="speakMs">' +
+      '<span class="label">Speaking</span>' +
+      '<button data-d="-15">&minus;15</button>' +
+      '<input type="text" inputmode="numeric" />' +
+      '<button data-d="15">+15</button>' +
+      '<button class="full">Full minute</button>' +
+    '</div>' +
+    '<div class="r-line" data-f="rebuttalMs">' +
+      '<span class="label">Rebuttal</span>' +
+      '<button data-d="-15">&minus;15</button>' +
+      '<input type="text" inputmode="numeric" />' +
+      '<button data-d="15">+15</button>' +
+      '<button class="full">Full minute</button>' +
+    '</div>';
+
+  row.querySelector('.r-x').onclick = function () {
+    if (confirm('Remove ' + m.name + ' from the list?')) post('drop', { id: m.id });
+  };
+
+  Array.prototype.forEach.call(row.querySelectorAll('.r-line'), function (line) {
+    var field = line.dataset.f;
+    var input = line.querySelector('input');
+
+    Array.prototype.forEach.call(line.querySelectorAll('button[data-d]'), function (b) {
+      b.onclick = function () {
+        var cur = parseTime(input.value);
+        if (cur === null) return;
+        setTime(m.id, field, cur + parseInt(b.dataset.d, 10) * 1000);
+      };
+    });
+    line.querySelector('.full').onclick = function () { setTime(m.id, field, 60000); };
+
+    var commit = function () {
+      var v = parseTime(input.value);
+      if (v === null) { input.dataset.editing = ''; renderRoster(); return; }
+      input.dataset.editing = '';
+      setTime(m.id, field, v);
+      input.blur();
+    };
+    input.onkeydown = function (e) {
+      if (e.key === 'Enter') commit();
+      if (e.key === 'Escape') {
+        e.stopPropagation(); // cancel the edit, not the whole drawer
+        input.dataset.editing = '';
+        input.blur();
+        renderRoster();
+      }
+    };
+    input.onblur = function () { if (input.dataset.editing) commit(); };
+    input.onfocus = function () { input.dataset.editing = '1'; input.select(); };
+  });
+
+  return row;
+}
+
+function renderRoster() {
+  if (!state || !$('drawer').classList.contains('open')) return;
+  var host = $('rosterList');
+  var seen = {};
+
+  state.roster.forEach(function (m) {
+    seen[m.id] = true;
+    var row = rows[m.id];
+    if (!row) { row = rows[m.id] = buildRow(m); host.appendChild(row); }
+
+    row.querySelector('.r-name').textContent = m.name;
+
+    var tag = row.querySelector('.r-tag');
+    if (m.onFloor)      { tag.style.display = ''; tag.className = 'r-tag floor';  tag.textContent = 'On floor'; }
+    else if (m.queued)  { tag.style.display = ''; tag.className = 'r-tag queued'; tag.textContent = 'Rebuttal'; }
+    else if (m.intent === 'pass') { tag.style.display = ''; tag.className = 'r-tag passed'; tag.textContent = 'Passed'; }
+    else tag.style.display = 'none';
+
+    // Never overwrite a field the chair is mid-edit on.
+    Array.prototype.forEach.call(row.querySelectorAll('.r-line'), function (line) {
+      var input = line.querySelector('input');
+      if (document.activeElement === input) return;
+      var isSpeak = line.dataset.f === 'speakMs';
+      var v = isSpeak ? m.speakMs : m.rebuttalMs;
+      // The person on the floor is spending time right now — show it draining.
+      if (m.onFloor && state.active &&
+          (state.active.kind === 'speak') === isSpeak) {
+        v = Math.max(0, remaining());
+      }
+      input.value = short(v);
+    });
+  });
+
+  Object.keys(rows).forEach(function (id) {
+    if (!seen[id]) { rows[id].remove(); delete rows[id]; }
+  });
+
+  if (!state.roster.length) host.innerHTML = '<div class="empty" style="padding:1.1rem">Nobody has signed up yet.</div>';
+}
+
+function render() {
+  if (!state) return;
+
+  $('joinUrl').textContent = location.origin;
+
+  var signup = state.phase === 'signup';
+  $('splash').classList.toggle('show', signup);
+  $('stage').style.display = signup ? 'none' : '';
+  $('splashCount').textContent = state.roster.length;
+
+  $('passMark').textContent = signup
+    ? '—'
+    : state.phase === 'ended'
+      ? 'Adjourned'
+      : state.mainListComplete
+        ? 'Rebuttals only'
+        : (state.cycle === 1 ? 'I' : 'II') + ' of II';
+
+  $('btnStart').disabled = !signup;
+  $('btnNext').disabled = state.phase !== 'running';
+  $('btnPause').disabled = !state.active;
+  $('btnPause').textContent = state.active && state.active.paused ? 'Resume clock' : 'Pause clock';
+
+  list($('upcoming'), state.upcoming, 'speak');
+  list($('rebuttals'), state.rebuttals, 'reb');
+
+  $('deferred').innerHTML = state.deferred.length
+    ? 'Passed this round: <span>' + state.deferred.map(function (m) { return m.name; }).join(', ') + '</span>'
+    : '';
+
+  renderRoster();
+  tick();
+}
+
+function tick() {
+  if (!state) return;
+  var a = state.active;
+  var stateEl = $('state'), spk = $('speaker'), clk = $('clock'), bank = $('bank');
+
+  if (!a) {
+    stateEl.className = 'idle';
+    stateEl.textContent = state.phase === 'ended' ? 'Adjourned'
+      : state.mainListComplete ? 'Main list finished — rebuttals still open'
+      : 'Floor open';
+    spk.className = 'none';
+    spk.textContent = state.phase === 'ended' ? 'Meeting closed' : 'Nobody has the floor';
+    clk.textContent = '0:00';
+    clk.className = '';
+    bank.style.width = '0%';
+    $('pausedFlag').textContent = '';
+    return;
+  }
+
+  var left = remaining();
+  var over = left < 0;
+
+  stateEl.className = over ? 'over' : (a.kind === 'rebuttal' ? 'rebuttal' : '');
+  stateEl.textContent = over
+    ? 'Over time'
+    : a.kind === 'rebuttal' ? 'Rebuttal' : 'Speaking';
+
+  spk.className = '';
+  spk.textContent = a.name;
+
+  clk.textContent = fmt(left);
+  clk.className = (over ? 'over' : left <= 10000 ? 'warn' : '') + (a.paused ? ' paused' : '');
+
+  bank.style.width = Math.max(0, Math.min(100, (left / FULL) * 100)) + '%';
+  bank.className = over ? 'over' : (a.kind === 'rebuttal' ? 'rebuttal' : '');
+  if (over) bank.style.width = '100%';
+
+  $('pausedFlag').textContent = a.paused ? 'Clock paused' : '';
+  renderRoster();
+}
+
+setInterval(tick, 200);
+</script>
+</body>
+</html>
